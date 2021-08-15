@@ -3,53 +3,47 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./interfaces/ITransformium.sol";
 
 // Chainlink random number haven't implemented because of some limitations.
 contract Avatars is ERC1155, Ownable {
+    using SafeERC20 for IERC20;
+
+    ITransformium public transformium;
+
     uint256 public avatarCreationFee;
     uint256 public attachmentCreationFee;
-    mapping(address => mapping(uint => uint)) public attachmentInUse; // owner => tokenId => no. of attachment attached to avatars
+    uint256 public totalAttachments;
+    uint256 public totalTokens;
+    uint256 public version;
 
-    string[] public attachments = [
-        "accessories", 
-        "accessoriesColor", 
-        "clotheGraphics", 
-        "clothes", 
-        "clothesColor", 
-        "eyebrow", 
-        "eyes", 
-        "facialHair", 
-        "facialHairColor", 
-        "hairColor", 
-        "hatColor", 
-        "mouth", 
-        "skin", 
-        "top"
-    ];
+    // owner => tokenId => no. of attachment attached to avatars
+    mapping(address => mapping(uint => uint)) public attachmentInUse; 
+    mapping(address => uint) public totalAvatars;
+    mapping(address => uint) public defaultAvatar;
 
-    uint[] public totalAttachments = [6, 18, 10, 12, 18, 18, 14, 10, 12, 12, 18, 12, 7, 37];
 
-    uint public TRANSFORMIUM = 0;
-    uint256 public totalTokens = 1;
+    // mapping(bytes32 => uint) public requestToToken; //request ID to token ID
+    // mapping(bytes32 => address) public requestToOwner; //request ID to token ID
 
-    mapping(bytes32 => uint) public requestToToken; //request ID to token ID
-    mapping(bytes32 => address) public requestToOwner; //request ID to token ID
-    mapping(string => uint) public attachmentStartId;
+    event AttachmentAdded(address indexed updater, uint avatarId, uint attachmentId);
+    event AttachmentRemoved(address indexed updater, uint avatarId, uint attachmentId);
+    event UpdateDefaultAvatar(address indexed updater, uint avatarId);
 
-    // event AvatarCreated(address indexed owner, uint avatarId);
-    event AttachmentAdded(address indexed updater, uint avatarId, string attachmentName, uint attachmentId);
-    event AttachmentRemoved(address indexed updater, uint avatarId, string attachmentName, uint attachmentId);
-
-    constructor(uint _avatarCreationFee, uint _attachmentCreationFee) 
-    ERC1155("") {
+    constructor(
+        uint _version, 
+        address _transformium, 
+        uint _avatarCreationFee, 
+        uint _attachmentCreationFee, 
+        uint _totalAttachments
+    ) ERC1155("") {
         avatarCreationFee = _avatarCreationFee;
         attachmentCreationFee = _attachmentCreationFee;
-        for(uint i; i < attachments.length; i++){
-            string memory attachmentName = attachments[i];
-            attachmentStartId[attachmentName] = totalTokens;
-            totalTokens += totalAttachments[i];
-        }
-        _mint(_msgSender(), TRANSFORMIUM, 10**12, "");
+        transformium = ITransformium(_transformium);
+        totalAttachments = _totalAttachments;
+        totalTokens = _totalAttachments;
+        version = _version;
     }
 
     function setAvatarCreationFee(uint fee) public onlyOwner {
@@ -60,38 +54,47 @@ contract Avatars is ERC1155, Ownable {
         attachmentCreationFee = fee;
     }
 
+    // Note: Make sure to give approval for spending TFM from frontend.
     function createAvatar() external {
         uint tokenId = totalTokens;
-        _burn(_msgSender(), TRANSFORMIUM, avatarCreationFee);
+        if(totalAvatars[_msgSender()] == 0){
+            defaultAvatar[_msgSender()] = tokenId;
+            emit UpdateDefaultAvatar(_msgSender(), tokenId);
+        } 
+        totalAvatars[_msgSender()]++;
+        transformium.burnFrom(_msgSender(), avatarCreationFee);
         _mint(_msgSender(), tokenId, 1, "");
-        // emit AvatarCreated(_msgSender(), tokenId);
         totalTokens++;
     }
 
-    function addAttachment(uint avatarId, string memory attachmentName, uint attachmentId) external {
-        uint tokenId = attachmentStartId[attachmentName] + attachmentId;
+    function changeDefaultAvatar(uint tokenId) external {
+        require(!isAttachment(tokenId), "Avatars: Not a valid avatar!");
+        require(balanceOf(_msgSender(), tokenId) == 1, "Avatars: You must be owner of the avatar!");
+        defaultAvatar[_msgSender()] = tokenId;
+        emit UpdateDefaultAvatar(_msgSender(), tokenId);
+    }
+
+    function addAttachment(uint avatarId, uint tokenId) external {
+        require(isAttachment(tokenId), "Avatars: Not a valid attachment!");
+        require(balanceOf(_msgSender(), tokenId) >= 1, "Avatars: You must own Attachments!");
         attachmentInUse[_msgSender()][tokenId] += 1;
-        // safeTransferFrom(_msgSender(), address(this), tokenId, 1, "");
-        emit AttachmentAdded(_msgSender(), avatarId, attachmentName, tokenId);
+        emit AttachmentAdded(_msgSender(), avatarId, tokenId);
     }
 
-    function removeAttachment(uint avatarId, string memory attachmentName, uint attachmentId) external {
-        uint tokenId = attachmentStartId[attachmentName] + attachmentId;
+    function removeAttachment(uint avatarId, uint tokenId) external {
+        require(isAttachment(tokenId), "Avatars: Not a valid attachment!");
         attachmentInUse[_msgSender()][tokenId] -= 1;
-        // safeTransferFrom(address(this), _msgSender(), tokenId, 1, "");
-        emit AttachmentRemoved(_msgSender(), avatarId, attachmentName, tokenId);
+        emit AttachmentRemoved(_msgSender(), avatarId, tokenId);
     }
 
-    function buyAttachment(string memory attachmentName, uint attachmentId) external {
-        _burn(_msgSender(), TRANSFORMIUM, attachmentCreationFee);
-        uint tokenId = attachmentStartId[attachmentName] + attachmentId;
+    function buyAttachment(uint tokenId) external {
+        require(isAttachment(tokenId), "Avatars: Not a valid attachment!");
+        transformium.burnFrom(_msgSender(), attachmentCreationFee);
         _mint(_msgSender(), tokenId, 1, "");
     }
 
-    function sellAttachment(string memory attachmentName, uint attachmentId) external {
-        _mint(_msgSender(), TRANSFORMIUM, attachmentCreationFee, "");
-        uint tokenId = attachmentStartId[attachmentName] + attachmentId;
-        _burn(_msgSender(), tokenId, 1);
+    function isAttachment(uint tokenId) public view returns (bool) {
+        return tokenId < totalAttachments;
     }
 
     function safeTransferFrom(
@@ -104,8 +107,13 @@ contract Avatars is ERC1155, Ownable {
         public
         override
     {
-        require(balanceOf(from, id) - attachmentInUse[from][id] >= amount, "Avatars: Insufficient tokens");
+        require(!isAttachment(id), "Avataars can't be transferred!");
+        require(
+            balanceOf(from, id) - attachmentInUse[from][id] >= amount, 
+            "Avatars: Insufficient tokens!"
+        );
         super.safeTransferFrom(from, to, id, amount, data);
+
     }
 
     function safeBatchTransferFrom(
@@ -120,7 +128,11 @@ contract Avatars is ERC1155, Ownable {
         override
     {
         for (uint256 i = 0; i < ids.length; ++i) {
-            require(balanceOf(from, ids[i]) - attachmentInUse[from][ids[i]] >= amounts[i], "Avatars: Insufficient tokens");
+            require(!isAttachment(ids[i]), "Avataars can't be transferred!");
+            require(
+                balanceOf(from, ids[i]) - attachmentInUse[from][ids[i]] >= amounts[i], 
+                "Avatars: Insufficient tokens!"
+            );
         }
         super.safeBatchTransferFrom(from, to, ids, amounts, data);
     }
