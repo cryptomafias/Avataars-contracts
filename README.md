@@ -1,1 +1,1 @@
-Avataars-contracts
+NFT Avatars
