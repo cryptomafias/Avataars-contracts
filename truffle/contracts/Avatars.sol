@@ -74,6 +74,7 @@ contract Avatars is ERC1155, Ownable {
         emit UpdateDefaultAvatar(_msgSender(), tokenId);
     }
 
+    // Todo: Maintain list of attached attachement so that removal can be possible.
     function addAttachment(uint avatarId, uint tokenId) external {
         require(isAttachment(tokenId), "Avatars: Not a valid attachment!");
         require(balanceOf(_msgSender(), tokenId) >= 1, "Avatars: You must own Attachments!");
@@ -81,11 +82,12 @@ contract Avatars is ERC1155, Ownable {
         emit AttachmentAdded(_msgSender(), avatarId, tokenId);
     }
 
-    function removeAttachment(uint avatarId, uint tokenId) external {
-        require(isAttachment(tokenId), "Avatars: Not a valid attachment!");
-        attachmentInUse[_msgSender()][tokenId] -= 1;
-        emit AttachmentRemoved(_msgSender(), avatarId, tokenId);
-    }
+    // function removeAttachment(uint avatarId, uint tokenId) external {
+    //     require(isAttachment(tokenId), "Avatars: Not a valid attachment!");
+        
+    //     attachmentInUse[_msgSender()][tokenId] -= 1;
+    //     emit AttachmentRemoved(_msgSender(), avatarId, tokenId);
+    // }
 
     function buyAttachment(uint tokenId) external {
         require(isAttachment(tokenId), "Avatars: Not a valid attachment!");

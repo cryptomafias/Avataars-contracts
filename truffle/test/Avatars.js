@@ -171,7 +171,7 @@ contract("Avatars test", async (accounts) => {
   //   });
   // });
 
-  describe("only allow person with attachment can attach it", function () {
+  describe("only allow person with attachment to attach it", function () {
     before(async function () {
       transformium = await Transformium.new(10**10);
       instance = await Avatars.new(1, transformium.address, 1000, 100, 204);
@@ -201,4 +201,37 @@ contract("Avatars test", async (accounts) => {
       );
     });
   });
+
+// Todo: Implement this
+//   describe("only allow person with attachment attached to remove it", function () {
+//     before(async function () {
+//       transformium = await Transformium.new(10**10);
+//       instance = await Avatars.new(1, transformium.address, 1000, 100, 204);
+
+//       await transformium.transfer(nonOwner, 10000, {from: owner});
+//       await transformium.approve(instance.address, 10 ** 10, {from: owner});
+//       await transformium.approve(instance.address, 10 ** 10, {from: nonOwner});
+  
+//       await instance.createAvatar({from: owner});
+//       await instance.createAvatar({from: nonOwner});
+//       await instance.buyAttachment(1, {from: owner});
+//       tx = await instance.addAttachment(205, 1);
+//     });
+//     it("should complete successfully", async function () {
+//       tx = await instance.removeAttachment(205, 1);
+//       const eventLogs = tx.receipt.logs;
+
+//       // Check if Attachment is added
+//       assert.equal(eventLogs[0].event, "AttachmentRemoved");
+//       assert.equal(eventLogs[0].args.updater, owner);
+//       assert.equal(eventLogs[0].args.avatarId.valueOf(), 205);
+//       assert.equal(eventLogs[0].args.attachmentId.valueOf(), 1);
+//     });
+//     it("should abort with an error", async function () {
+//       await catchRevert(
+//         instance.removeAttachment(206, 1, { from: nonOwner }),
+//         "Avatars: You must own Attachments!"
+//       );
+//     });
+//   });
 });
